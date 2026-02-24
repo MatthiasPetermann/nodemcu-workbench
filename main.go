@@ -22,6 +22,10 @@ type appModel struct {
 	ctx  string
 	mode ui.Mode
 
+	port string
+	baud int
+	sess *repl.Session
+
 	status ui.StatusLine
 
 	wb workbench.Model
@@ -30,17 +34,14 @@ type appModel struct {
 }
 
 func newApp() appModel {
-	// einfache Default-Werte, per ENV überschreibbar
 	port := os.Getenv("NODEMCU_PORT")
 	if port == "" {
 		port = "/dev/ttyUSB0"
 	}
 	baud := 115200
 
-	// Session optional: wenn Open fehlschlägt, läuft UI trotzdem (REMOTE leer)
 	var sess *repl.Session
 	if s, err := repl.Open(port, baud); err == nil {
-		// Sync ist optional, aber nett
 		_ = s.Sync(context.Background())
 		sess = s
 	}
@@ -49,11 +50,40 @@ func newApp() appModel {
 		tool:   "nodemcu-workbench",
 		ctx:    port,
 		mode:   ui.ModeWorkbench,
+		port:   port,
+		baud:   baud,
+		sess:   sess,
 		status: ui.NewStatusLine(),
-		wb:     workbench.New(sess), // <-- hier
-		tt:     terminal.New(sess),  // später: terminal.New(sess)
+		wb:     workbench.New(sess),
+		tt:     terminal.New(sess),
 		mm:     maintenance.New(),
 	}
+}
+
+func (m appModel) withSession(sess *repl.Session) appModel {
+	m.sess = sess
+	m.wb = m.wb.SetSession(sess)
+	m.tt = m.tt.SetSession(sess)
+	return m
+}
+
+func (m appModel) ensureSession() (appModel, error) {
+	if m.sess != nil {
+		return m, nil
+	}
+	s, err := repl.Open(m.port, m.baud)
+	if err != nil {
+		return m, err
+	}
+	_ = s.Sync(context.Background())
+	return m.withSession(s), nil
+}
+
+func (m appModel) releaseSession() appModel {
+	if m.sess != nil {
+		_ = m.sess.Close()
+	}
+	return m.withSession(nil)
 }
 
 func (m appModel) Init() tea.Cmd {
@@ -62,7 +92,6 @@ func (m appModel) Init() tea.Cmd {
 
 func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
 		m.status = m.status.SetSize(m.w)
@@ -92,26 +121,36 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.KeyMsg:
-		// global quit
 		if msg.String() == "ctrl+c" || msg.String() == "f10" {
+			m = m.releaseSession()
 			return m, tea.Quit
 		}
 
-		// prompt blocks other input
 		if m.status.IsPromptActive() {
 			var cmd tea.Cmd
 			m.status, cmd = m.status.Update(msg)
 			return m, cmd
 		}
 
-		// global mode switch
 		if msg.String() == "f9" {
-			m.mode = (m.mode + 1) % 3
+			newMode := (m.mode + 1) % 3
+			m.mode = newMode
+			if newMode == ui.ModeMaintenance {
+				m = m.releaseSession()
+				m.status = m.status.SetStatus(ui.StatusInfo, "Switched to "+m.mode.String()+" (serial released)")
+				return m, nil
+			}
+
+			var err error
+			m, err = m.ensureSession()
+			if err != nil {
+				m.status = m.status.SetStatus(ui.StatusWarn, "Switched to "+m.mode.String()+" (serial open failed: "+err.Error()+")")
+				return m, nil
+			}
 			m.status = m.status.SetStatus(ui.StatusInfo, "Switched to "+m.mode.String())
 			return m, nil
 		}
 
-		// route
 		switch m.mode {
 		case ui.ModeWorkbench:
 			var cmd tea.Cmd
@@ -152,7 +191,6 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// async messages
 	switch m.mode {
 	case ui.ModeWorkbench:
 		var cmd tea.Cmd
@@ -204,7 +242,6 @@ func (m appModel) View() string {
 		ui.KeyBar(m.w, m.keys()),
 	)
 
-	// FINAL: enforce full-screen background and exact dimensions
 	return lipgloss.NewStyle().
 		Width(m.w).
 		Height(m.h).
@@ -215,37 +252,17 @@ func (m appModel) View() string {
 func (m appModel) keys() []ui.FKey {
 	switch m.mode {
 	case ui.ModeWorkbench:
-		return []ui.FKey{
-			{Key: "F2", Label: "Refresh"},
-			{Key: "F4", Label: "Edit"},
-			{Key: "F5", Label: "Copy"},
-			{Key: "F6", Label: "Rename"},
-			{Key: "F7", Label: "New Dir"},
-			{Key: "F8", Label: "Delete"},
-			{Key: "F9", Label: "Mode"},
-			{Key: "F10", Label: "Quit"},
-		}
+		return []ui.FKey{{Key: "F2", Label: "Refresh"}, {Key: "F4", Label: "Edit"}, {Key: "F5", Label: "Copy"}, {Key: "F6", Label: "Rename"}, {Key: "F7", Label: "New Dir"}, {Key: "F8", Label: "Delete"}, {Key: "F9", Label: "Mode"}, {Key: "F10", Label: "Quit"}}
 	case ui.ModeTerminal:
-		return []ui.FKey{
-			{Key: "F2", Label: "Clear"},
-			{Key: "F5", Label: "Reconnect"},
-			{Key: "F9", Label: "Mode"},
-			{Key: "F10", Label: "Quit"},
-		}
+		return []ui.FKey{{Key: "F2", Label: "Clear"}, {Key: "F5", Label: "Reconnect"}, {Key: "F9", Label: "Mode"}, {Key: "F10", Label: "Quit"}}
 	case ui.ModeMaintenance:
-		return []ui.FKey{
-			{Key: "F5", Label: "Select"},
-			{Key: "F8", Label: "Flash"},
-			{Key: "F9", Label: "Mode"},
-			{Key: "F10", Label: "Quit"},
-		}
+		return []ui.FKey{{Key: "F5", Label: "Select"}, {Key: "F8", Label: "Flash"}, {Key: "F9", Label: "Mode"}, {Key: "F10", Label: "Quit"}}
 	default:
 		return []ui.FKey{{Key: "F9", Label: "Mode"}, {Key: "F10", Label: "Quit"}}
 	}
 }
 
 func (m appModel) contentSize() (int, int) {
-	// header(1) + status(1) + keybar(1)
 	ch := m.h - 6
 	if ch < 1 {
 		ch = 1
@@ -256,7 +273,9 @@ func (m appModel) contentSize() (int, int) {
 func main() {
 	app := newApp()
 	defer func() {
-		// wenn du sess in appModel speicherst, hier schließen
+		if app.sess != nil {
+			_ = app.sess.Close()
+		}
 	}()
 
 	p := tea.NewProgram(app, tea.WithAltScreen())

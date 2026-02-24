@@ -71,6 +71,12 @@ func (m Model) SetSize(w, h int) Model {
 	return m
 }
 
+func (m Model) SetSession(sess *repl.Session) Model {
+	m.session = sess
+	m.refreshRemote()
+	return m
+}
+
 /* =========================
    UPDATE
 ========================= */
@@ -260,6 +266,9 @@ func (m Model) OnPrompt(res ui.PromptResultMsg) (Model, tea.Cmd) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 
+		if m.session == nil {
+			return m, statusErr(errors.New("not connected"))
+		}
 		if err := m.session.Remove(ctx, m.pendingDelete); err != nil {
 			return m, statusErr(err)
 		}
@@ -400,6 +409,10 @@ func (m Model) uploadCmd(path string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
+		if m.session == nil {
+			return ui.StatusMsg{Kind: ui.StatusError, Text: "not connected"}
+		}
+
 		err = m.session.WriteFile(ctx, filepath.Base(path), data, nil)
 		if err != nil {
 			return ui.StatusMsg{Kind: ui.StatusError, Text: err.Error()}
@@ -419,7 +432,10 @@ func readDir(dir string) []entry {
 	if err != nil {
 		return nil
 	}
-	type tmp struct{ n string; d bool }
+	type tmp struct {
+		n string
+		d bool
+	}
 	t := []tmp{}
 	for _, d := range des {
 		t = append(t, tmp{d.Name(), d.IsDir()})
