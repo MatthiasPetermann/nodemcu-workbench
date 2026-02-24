@@ -30,6 +30,11 @@ type deviceInfo struct {
 	MagicValue uint32
 }
 
+type flashSegment struct {
+	Offset uint32
+	Path   string
+}
+
 func openESPClient(portName string, baud int) (*espClient, error) {
 	ports := candidatePorts(portName)
 	var lastErr error
@@ -184,28 +189,39 @@ func (c *espClient) eraseFlash() error {
 }
 
 func (c *espClient) flashFirmware(path string, offset uint32) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return err
+	return c.flashImages([]flashSegment{{Offset: offset, Path: path}})
+}
+
+func (c *espClient) flashImages(segments []flashSegment) error {
+	if len(segments) == 0 {
+		return fmt.Errorf("no firmware segments provided")
 	}
 
-	blocks, err := c.flashBegin(len(data), offset)
-	if err != nil {
-		return err
+	for idx, seg := range segments {
+		data, err := os.ReadFile(seg.Path)
+		if err != nil {
+			return fmt.Errorf("segment %d (%s): %w", idx, seg.Path, err)
+		}
+
+		blocks, err := c.flashBegin(len(data), seg.Offset)
+		if err != nil {
+			return fmt.Errorf("segment %d (%s @0x%08x): %w", idx, seg.Path, seg.Offset, err)
+		}
+
+		for seq := 0; seq < blocks; seq++ {
+			start := seq * espFlashWriteSize
+			end := start + espFlashWriteSize
+			if end > len(data) {
+				end = len(data)
+			}
+			blk := make([]byte, espFlashWriteSize)
+			copy(blk, data[start:end])
+			if err := c.flashData(blk, seq); err != nil {
+				return fmt.Errorf("segment %d (%s @0x%08x block=%d): %w", idx, seg.Path, seg.Offset, seq, err)
+			}
+		}
 	}
 
-	for seq := 0; seq < blocks; seq++ {
-		start := seq * espFlashWriteSize
-		end := start + espFlashWriteSize
-		if end > len(data) {
-			end = len(data)
-		}
-		blk := make([]byte, espFlashWriteSize)
-		copy(blk, data[start:end])
-		if err := c.flashData(blk, seq); err != nil {
-			return err
-		}
-	}
 	return c.flashEnd(true)
 }
 

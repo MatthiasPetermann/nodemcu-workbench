@@ -3,7 +3,6 @@ package maintenance
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -100,7 +99,7 @@ func (m Model) UpdateKeys(k tea.KeyMsg) (Model, tea.Cmd, ui.PromptRequest, bool)
 			return m, nil, ui.PromptRequest{Active: true, Kind: ui.PromptConfirmDelete, Label: m.pendingAction + "? (y/n)", Initial: "n"}, true
 		case "Flash Firmware":
 			m.pendingAction = string(i)
-			return m, nil, ui.PromptRequest{Active: true, Kind: ui.PromptNewFile, Label: "Firmware BIN path", Placeholder: "./firmware.bin", Initial: os.Getenv("NODEMCU_FIRMWARE")}, true
+			return m, nil, ui.PromptRequest{Active: true, Kind: ui.PromptNewFile, Label: "Firmware directory", Placeholder: "e.g. ./firmware", Initial: os.Getenv("NODEMCU_FIRMWARE_DIR")}, true
 		}
 	}
 
@@ -125,12 +124,12 @@ func (m Model) OnPrompt(res ui.PromptResultMsg) (Model, tea.Cmd) {
 
 	case "Flash Firmware":
 		m.pendingAction = ""
-		path := strings.TrimSpace(res.Value)
-		if path == "" {
-			return m, statusErr("firmware path is empty")
+		dir := strings.TrimSpace(res.Value)
+		if dir == "" {
+			dir = "."
 		}
 		m.busy = true
-		return m, tea.Batch(status("Flashing firmware…"), runFlashFirmware(m.port, m.baud, path, envUint32("NODEMCU_FLASH_ADDR", 0)))
+		return m, tea.Batch(status("Flashing firmware segments…"), runFlashFirmware(m.port, m.baud, dir))
 	}
 
 	return m, nil
@@ -189,7 +188,7 @@ func runEraseFlash(port string, baud int) tea.Cmd {
 	}
 }
 
-func runFlashFirmware(port string, baud int, path string, offset uint32) tea.Cmd {
+func runFlashFirmware(port string, baud int, dir string) tea.Cmd {
 	return func() tea.Msg {
 		c, err := openESPClient(port, baud)
 		if err != nil {
@@ -200,23 +199,30 @@ func runFlashFirmware(port string, baud int, path string, offset uint32) tea.Cmd
 		if err := c.sync(); err != nil {
 			return maintenanceDoneMsg{err: err}
 		}
-		if err := c.flashFirmware(path, offset); err != nil {
+		segs := []flashSegment{
+			{Offset: 0x0, Path: joinBin(dir, envOr("NODEMCU_BOOT_BIN", "0x00000.bin"))},
+			{Offset: 0x10000, Path: joinBin(dir, envOr("NODEMCU_APP_BIN", "0x10000.bin"))},
+		}
+		if err := c.flashImages(segs); err != nil {
 			return maintenanceDoneMsg{err: err}
 		}
-		return maintenanceDoneMsg{text: "Firmware flashed"}
+		return maintenanceDoneMsg{text: "Firmware flashed (0x00000.bin@0x0, 0x10000.bin@0x10000)"}
 	}
 }
 
-func envUint32(name string, fallback uint32) uint32 {
-	raw := strings.TrimSpace(os.Getenv(name))
-	if raw == "" {
+func joinBin(dir, file string) string {
+	if strings.TrimSpace(dir) == "" || dir == "." {
+		return file
+	}
+	return dir + string(os.PathSeparator) + file
+}
+
+func envOr(name, fallback string) string {
+	v := strings.TrimSpace(os.Getenv(name))
+	if v == "" {
 		return fallback
 	}
-	v, err := strconv.ParseUint(raw, 0, 32)
-	if err != nil {
-		return fallback
-	}
-	return uint32(v)
+	return v
 }
 
 func status(text string) tea.Cmd {
