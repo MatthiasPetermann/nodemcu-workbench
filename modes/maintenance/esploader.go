@@ -85,6 +85,15 @@ func candidatePorts(preferred string) []string {
 
 func (c *espClient) Close() error { return c.port.Close() }
 
+func (c *espClient) hardReset() {
+	// EN low/high pulse via RTS, matching common ESP reset wiring.
+	_ = c.port.SetRTS(true)
+	time.Sleep(120 * time.Millisecond)
+	_ = c.port.SetRTS(false)
+	time.Sleep(120 * time.Millisecond)
+	_ = c.port.SetDTR(false)
+}
+
 func (c *espClient) enterBootloader() {
 	_ = c.port.SetDTR(false)
 	_ = c.port.SetRTS(true)

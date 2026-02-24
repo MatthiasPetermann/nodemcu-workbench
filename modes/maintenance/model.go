@@ -184,6 +184,7 @@ func runEraseFlash(port string, baud int) tea.Cmd {
 		if err := c.eraseFlash(); err != nil {
 			return maintenanceDoneMsg{err: err}
 		}
+		c.hardReset()
 		return maintenanceDoneMsg{text: "Flash erased"}
 	}
 }
@@ -206,6 +207,7 @@ func runFlashFirmware(port string, baud int, dir string) tea.Cmd {
 		if err := c.flashImages(segs); err != nil {
 			return maintenanceDoneMsg{err: err}
 		}
+		c.hardReset()
 		return maintenanceDoneMsg{text: "Firmware flashed (0x00000.bin@0x0, 0x10000.bin@0x10000)"}
 	}
 }
