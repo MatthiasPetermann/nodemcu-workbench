@@ -116,11 +116,29 @@ func (c *espClient) identify() (deviceInfo, error) {
 }
 
 func (c *espClient) eraseFlash() error {
-	const eraseSize = 4 * 1024 * 1024
-	_, err := c.flashBegin(eraseSize, 0)
+	eraseSize := 4 * 1024 * 1024
+
+	// Try ROM upfront-erase first. Some ROMs reject this combination with
+	// status/reason errors (for example reason=6), then fallback to explicitly
+	// writing 0xFF blocks which also results in an erased flash region.
+	if _, err := c.flashBegin(eraseSize, 0); err == nil {
+		return c.flashEnd(false)
+	} else if !isROMReason(err, 6) {
+		return err
+	}
+
+	blocks, err := c.flashBegin(eraseSize, 0)
 	if err != nil {
 		return err
 	}
+
+	blank := bytes.Repeat([]byte{0xFF}, espFlashWriteSize)
+	for seq := 0; seq < blocks; seq++ {
+		if err := c.flashData(blank, seq); err != nil {
+			return err
+		}
+	}
+
 	return c.flashEnd(false)
 }
 
@@ -308,4 +326,11 @@ func checksum(data []byte) uint32 {
 		c ^= b
 	}
 	return uint32(c)
+}
+
+func isROMReason(err error, reason int) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), fmt.Sprintf("reason=%d", reason))
 }
