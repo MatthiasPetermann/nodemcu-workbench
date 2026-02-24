@@ -1,9 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"context"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -51,11 +51,10 @@ func newApp() appModel {
 		mode:   ui.ModeWorkbench,
 		status: ui.NewStatusLine(),
 		wb:     workbench.New(sess), // <-- hier
-		tt:     terminal.New(sess),       // später: terminal.New(sess)
+		tt:     terminal.New(sess),  // später: terminal.New(sess)
 		mm:     maintenance.New(),
 	}
 }
-
 
 func (m appModel) Init() tea.Cmd {
 	return tea.Batch(m.wb.Init(), m.tt.Init(), m.mm.Init())
@@ -79,12 +78,18 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ui.PromptResultMsg:
 		m.status = m.status.EndPrompt()
-		if m.mode == ui.ModeWorkbench {
+		switch m.mode {
+		case ui.ModeWorkbench:
 			var cmd tea.Cmd
 			m.wb, cmd = m.wb.OnPrompt(msg)
 			return m, cmd
+		case ui.ModeMaintenance:
+			var cmd tea.Cmd
+			m.mm, cmd = m.mm.OnPrompt(msg)
+			return m, cmd
+		default:
+			return m, nil
 		}
-		return m, nil
 
 	case tea.KeyMsg:
 		// global quit
