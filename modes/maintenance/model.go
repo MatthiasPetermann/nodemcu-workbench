@@ -152,7 +152,8 @@ func (m Model) View() string {
 }
 
 func (m Model) renderTiles() string {
-	cardW := ui.Max(22, (m.w-8)/3)
+	// Border + frame composition caused a +1 overflow in each tile.
+	cardW := ui.Max(21, (m.w-8)/3-1)
 	parts := make([]string, 0, len(m.actions))
 	for i, a := range m.actions {
 		st := lipgloss.NewStyle().Width(cardW).Height(5).Padding(0, 1).Border(lipgloss.RoundedBorder()).BorderForeground(ui.T.Border)
