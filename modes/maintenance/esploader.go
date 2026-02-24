@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -29,12 +31,51 @@ type deviceInfo struct {
 }
 
 func openESPClient(portName string, baud int) (*espClient, error) {
-	p, err := serial.Open(portName, &serial.Mode{BaudRate: baud})
-	if err != nil {
-		return nil, err
+	ports := candidatePorts(portName)
+	var lastErr error
+	for _, pth := range ports {
+		p, err := serial.Open(pth, &serial.Mode{BaudRate: baud})
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		_ = p.SetReadTimeout(200 * time.Millisecond)
+		return &espClient{port: p}, nil
 	}
-	_ = p.SetReadTimeout(200 * time.Millisecond)
-	return &espClient{port: p}, nil
+
+	if lastErr != nil {
+		return nil, fmt.Errorf("open serial failed (tried %v): %w", ports, lastErr)
+	}
+	return nil, fmt.Errorf("open serial failed: no candidate ports")
+}
+
+func candidatePorts(preferred string) []string {
+	seen := map[string]struct{}{}
+	add := func(out *[]string, p string) {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			return
+		}
+		if _, ok := seen[p]; ok {
+			return
+		}
+		seen[p] = struct{}{}
+		*out = append(*out, p)
+	}
+
+	out := make([]string, 0, 8)
+	add(&out, preferred)
+
+	patterns := []string{"/dev/ttyUSB*", "/dev/ttyACM*", "/dev/cu.usb*", "/dev/tty.SLAB*"}
+	for _, pat := range patterns {
+		matches, _ := filepath.Glob(pat)
+		sort.Strings(matches)
+		for _, m := range matches {
+			add(&out, m)
+		}
+	}
+
+	return out
 }
 
 func (c *espClient) Close() error { return c.port.Close() }
