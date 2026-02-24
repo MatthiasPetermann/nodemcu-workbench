@@ -8,7 +8,9 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"go.bug.st/serial"
 
+	"nodemcu-workbench/repl"
 	"nodemcu-workbench/ui"
 )
 
@@ -27,6 +29,7 @@ type Model struct {
 	port          string
 	baud          int
 	busy          bool
+	session       *repl.Session
 }
 
 type maintenanceDoneMsg struct {
@@ -34,7 +37,7 @@ type maintenanceDoneMsg struct {
 	err  error
 }
 
-func New() Model {
+func New(sess *repl.Session) Model {
 	items := []list.Item{
 		actionItem("Identify Device"),
 		actionItem("Erase Flash"),
@@ -52,7 +55,12 @@ func New() Model {
 		port = "/dev/ttyUSB0"
 	}
 
-	return Model{actions: l, port: port, baud: 115200}
+	return Model{actions: l, port: port, baud: 115200, session: sess}
+}
+
+func (m Model) SetSession(sess *repl.Session) Model {
+	m.session = sess
+	return m
 }
 
 func (m Model) Init() tea.Cmd { return nil }
@@ -93,7 +101,7 @@ func (m Model) UpdateKeys(k tea.KeyMsg) (Model, tea.Cmd, ui.PromptRequest, bool)
 		switch string(i) {
 		case "Identify Device":
 			m.busy = true
-			return m, tea.Batch(status("Detecting ESP device…"), runIdentify(m.port, m.baud)), ui.PromptRequest{}, true
+			return m, tea.Batch(status("Detecting ESP device…"), runIdentify(m.session, m.port, m.baud)), ui.PromptRequest{}, true
 		case "Erase Flash":
 			m.pendingAction = string(i)
 			return m, nil, ui.PromptRequest{Active: true, Kind: ui.PromptConfirmDelete, Label: m.pendingAction + "? (y/n)", Initial: "n"}, true
@@ -120,7 +128,7 @@ func (m Model) OnPrompt(res ui.PromptResultMsg) (Model, tea.Cmd) {
 		}
 		m.pendingAction = ""
 		m.busy = true
-		return m, tea.Batch(status("Erasing flash…"), runEraseFlash(m.port, m.baud))
+		return m, tea.Batch(status("Erasing flash…"), runEraseFlash(m.session, m.port, m.baud))
 
 	case "Flash Firmware":
 		m.pendingAction = ""
@@ -129,7 +137,7 @@ func (m Model) OnPrompt(res ui.PromptResultMsg) (Model, tea.Cmd) {
 			dir = "."
 		}
 		m.busy = true
-		return m, tea.Batch(status("Flashing firmware segments…"), runFlashFirmware(m.port, m.baud, dir))
+		return m, tea.Batch(status("Flashing firmware segments…"), runFlashFirmware(m.session, m.port, m.baud, dir))
 	}
 
 	return m, nil
@@ -150,8 +158,29 @@ func (m Model) View() string {
 	return box.Render(lipgloss.NewStyle().Render(body))
 }
 
-func runIdentify(port string, baud int) tea.Cmd {
+func runIdentify(sess *repl.Session, port string, baud int) tea.Cmd {
 	return func() tea.Msg {
+		if sess != nil {
+			var info deviceInfo
+			err := sess.WithExclusivePort(func(sp serial.Port) error {
+				c := &espClient{port: sp, owned: false}
+				c.enterBootloader()
+				if err := c.sync(); err != nil {
+					return err
+				}
+				d, err := c.identify()
+				if err != nil {
+					return err
+				}
+				info = d
+				return nil
+			})
+			if err != nil {
+				return maintenanceDoneMsg{err: err}
+			}
+			return maintenanceDoneMsg{text: fmt.Sprintf("%s chip=0x%06x mac=%s magic=0x%08x", info.Chip, info.ChipID, info.Mac, info.MagicValue)}
+		}
+
 		c, err := openESPClient(port, baud)
 		if err != nil {
 			return maintenanceDoneMsg{err: err}
@@ -170,8 +199,27 @@ func runIdentify(port string, baud int) tea.Cmd {
 	}
 }
 
-func runEraseFlash(port string, baud int) tea.Cmd {
+func runEraseFlash(sess *repl.Session, port string, baud int) tea.Cmd {
 	return func() tea.Msg {
+		if sess != nil {
+			err := sess.WithExclusivePort(func(sp serial.Port) error {
+				c := &espClient{port: sp, owned: false}
+				c.enterBootloader()
+				if err := c.sync(); err != nil {
+					return err
+				}
+				if err := c.eraseFlash(); err != nil {
+					return err
+				}
+				c.hardReset()
+				return nil
+			})
+			if err != nil {
+				return maintenanceDoneMsg{err: err}
+			}
+			return maintenanceDoneMsg{text: "Flash erased"}
+		}
+
 		c, err := openESPClient(port, baud)
 		if err != nil {
 			return maintenanceDoneMsg{err: err}
@@ -189,8 +237,29 @@ func runEraseFlash(port string, baud int) tea.Cmd {
 	}
 }
 
-func runFlashFirmware(port string, baud int, dir string) tea.Cmd {
+func runFlashFirmware(sess *repl.Session, port string, baud int, dir string) tea.Cmd {
 	return func() tea.Msg {
+		segs := []flashSegment{{Offset: 0x0, Path: joinBin(dir, envOr("NODEMCU_BOOT_BIN", "0x00000.bin"))}, {Offset: 0x10000, Path: joinBin(dir, envOr("NODEMCU_APP_BIN", "0x10000.bin"))}}
+
+		if sess != nil {
+			err := sess.WithExclusivePort(func(sp serial.Port) error {
+				c := &espClient{port: sp, owned: false}
+				c.enterBootloader()
+				if err := c.sync(); err != nil {
+					return err
+				}
+				if err := c.flashImages(segs); err != nil {
+					return err
+				}
+				c.hardReset()
+				return nil
+			})
+			if err != nil {
+				return maintenanceDoneMsg{err: err}
+			}
+			return maintenanceDoneMsg{text: "Firmware flashed (0x00000.bin@0x0, 0x10000.bin@0x10000)"}
+		}
+
 		c, err := openESPClient(port, baud)
 		if err != nil {
 			return maintenanceDoneMsg{err: err}
@@ -199,10 +268,6 @@ func runFlashFirmware(port string, baud int, dir string) tea.Cmd {
 		c.enterBootloader()
 		if err := c.sync(); err != nil {
 			return maintenanceDoneMsg{err: err}
-		}
-		segs := []flashSegment{
-			{Offset: 0x0, Path: joinBin(dir, envOr("NODEMCU_BOOT_BIN", "0x00000.bin"))},
-			{Offset: 0x10000, Path: joinBin(dir, envOr("NODEMCU_APP_BIN", "0x10000.bin"))},
 		}
 		if err := c.flashImages(segs); err != nil {
 			return maintenanceDoneMsg{err: err}

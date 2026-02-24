@@ -19,11 +19,11 @@ var (
 )
 
 /*
-   Prompt state
+Prompt state
 
-   NodeMCU REPL is stateful:
-   "> "  = ready
-   ">> " = continuation expected
+NodeMCU REPL is stateful:
+"> "  = ready
+">> " = continuation expected
 */
 type PromptKind int
 
@@ -56,15 +56,15 @@ func (s *Session) Close() error {
 }
 
 /*
-   Low-level prompt wait
+Low-level prompt wait
 
-   NodeMCU prompt is NOT line based.
-   It appears as a suffix in the byte stream:
+NodeMCU prompt is NOT line based.
+It appears as a suffix in the byte stream:
 
-     "\r\n> "   ready
-     "\r\n>> "  continuation
+	"\r\n> "   ready
+	"\r\n>> "  continuation
 
-   We therefore watch the stream and classify the prompt.
+We therefore watch the stream and classify the prompt.
 */
 func (s *Session) waitPrompt(
 	ctx context.Context,
@@ -260,4 +260,10 @@ func (s *Session) WriteFile(
 func (s *Session) Interrupt() error {
 	_, err := s.port.Write([]byte{0x03}) // Ctrl+C
 	return err
+}
+
+func (s *Session) WithExclusivePort(fn func(port serial.Port) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return fn(s.port)
 }

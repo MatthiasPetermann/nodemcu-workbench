@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"go.bug.st/serial"
+
+	"nodemcu-workbench/repl"
 )
 
 const (
@@ -20,7 +22,8 @@ const (
 )
 
 type espClient struct {
-	port serial.Port
+	port  serial.Port
+	owned bool
 }
 
 type deviceInfo struct {
@@ -45,13 +48,28 @@ func openESPClient(portName string, baud int) (*espClient, error) {
 			continue
 		}
 		_ = p.SetReadTimeout(200 * time.Millisecond)
-		return &espClient{port: p}, nil
+		return &espClient{port: p, owned: true}, nil
 	}
 
 	if lastErr != nil {
 		return nil, fmt.Errorf("open serial failed (tried %v): %w", ports, lastErr)
 	}
 	return nil, fmt.Errorf("open serial failed: no candidate ports")
+}
+
+func espClientFromSession(sess *repl.Session) (*espClient, error) {
+	if sess == nil {
+		return nil, fmt.Errorf("not connected")
+	}
+	var p serial.Port
+	err := sess.WithExclusivePort(func(port serial.Port) error {
+		p = port
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &espClient{port: p, owned: false}, nil
 }
 
 func candidatePorts(preferred string) []string {
@@ -83,7 +101,12 @@ func candidatePorts(preferred string) []string {
 	return out
 }
 
-func (c *espClient) Close() error { return c.port.Close() }
+func (c *espClient) Close() error {
+	if !c.owned {
+		return nil
+	}
+	return c.port.Close()
+}
 
 func (c *espClient) hardReset() {
 	// EN low/high pulse via RTS, matching common ESP reset wiring.
