@@ -54,15 +54,31 @@ func (c *espClient) enterBootloader() {
 
 func (c *espClient) sync() error {
 	payload := append([]byte{0x07, 0x07, 0x12, 0x20}, bytes.Repeat([]byte{0x55}, 32)...)
-	if _, _, err := c.command(0x08, payload, 0, 500*time.Millisecond); err != nil {
-		return err
-	}
-	for i := 0; i < 7; i++ {
-		if _, _, err := c.readPacket(500 * time.Millisecond); err != nil {
-			break
+
+	var lastErr error
+	for attempt := 0; attempt < 7; attempt++ {
+		_ = c.port.ResetInputBuffer()
+		_ = c.port.ResetOutputBuffer()
+
+		if _, _, err := c.command(0x08, payload, 0, 3*time.Second); err == nil {
+			// ROM often sends additional sync responses; drain a few opportunistically.
+			for i := 0; i < 7; i++ {
+				if _, _, err := c.readPacket(150 * time.Millisecond); err != nil {
+					break
+				}
+			}
+			return nil
+		} else {
+			lastErr = err
 		}
+
+		time.Sleep(100 * time.Millisecond)
 	}
-	return nil
+
+	if lastErr != nil {
+		return lastErr
+	}
+	return fmt.Errorf("sync failed")
 }
 
 func (c *espClient) identify() (deviceInfo, error) {
