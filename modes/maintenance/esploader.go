@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -37,6 +36,8 @@ type flashSegment struct {
 	Offset uint32
 	Path   string
 }
+
+type flashProgressFn func(phase string, done, total int)
 
 func openESPClient(portName string, baud int) (*espClient, error) {
 	ports := candidatePorts(portName)
@@ -221,18 +222,33 @@ func (c *espClient) eraseFlash() error {
 }
 
 func (c *espClient) flashFirmware(path string, offset uint32) error {
-	return c.flashImages([]flashSegment{{Offset: offset, Path: path}})
+	return c.flashImages([]flashSegment{{Offset: offset, Path: path}}, nil)
 }
 
-func (c *espClient) flashImages(segments []flashSegment) error {
+func (c *espClient) flashImages(segments []flashSegment, progress flashProgressFn) error {
 	if len(segments) == 0 {
 		return fmt.Errorf("no firmware segments provided")
 	}
+	if progress != nil {
+		progress("prepare", 0, 1)
+	}
 
+	totalAll := 0
+	images := make([][]byte, len(segments))
 	for idx, seg := range segments {
-		data, err := os.ReadFile(seg.Path)
+		data, err := readFirmwareData(seg.Path)
 		if err != nil {
 			return fmt.Errorf("segment %d (%s): %w", idx, seg.Path, err)
+		}
+		images[idx] = data
+		totalAll += len(data)
+	}
+
+	doneAll := 0
+	for idx, seg := range segments {
+		data := images[idx]
+		if progress != nil {
+			progress(fmt.Sprintf("flash 0x%08x", seg.Offset), doneAll, totalAll)
 		}
 
 		blocks, err := c.flashBegin(len(data), seg.Offset)
@@ -251,9 +267,16 @@ func (c *espClient) flashImages(segments []flashSegment) error {
 			if err := c.flashData(blk, seq); err != nil {
 				return fmt.Errorf("segment %d (%s @0x%08x block=%d): %w", idx, seg.Path, seg.Offset, seq, err)
 			}
+			doneAll += end - start
+			if progress != nil {
+				progress(fmt.Sprintf("flash 0x%08x", seg.Offset), doneAll, totalAll)
+			}
 		}
 	}
 
+	if progress != nil {
+		progress("finish", totalAll, totalAll)
+	}
 	return c.flashEnd(true)
 }
 
