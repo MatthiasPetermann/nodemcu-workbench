@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -25,9 +26,10 @@ type Model struct {
 	busy          bool
 	session       *repl.Session
 
-	phase string
-	done  int
-	total int
+	phase        string
+	done         int
+	total        int
+	showProgress bool
 
 	progressCh <-chan tea.Msg
 }
@@ -72,6 +74,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case maintenanceDoneMsg:
 		m.busy = false
 		m.progressCh = nil
+		m.showProgress = false
+		m.phase, m.done, m.total = "idle", 0, 0
 		if msg.err != nil {
 			return m, statusErr(msg.err.Error())
 		}
@@ -107,7 +111,7 @@ func (m Model) UpdateKeys(k tea.KeyMsg) (Model, tea.Cmd, ui.PromptRequest, bool)
 			return m, nil, ui.PromptRequest{Active: true, Kind: ui.PromptConfirmDelete, Label: "Erase Flash bestätigen"}, true
 		case "Flash Firmware":
 			m.pendingAction = a
-			return m, nil, ui.PromptRequest{Active: true, Kind: ui.PromptNewFile, Label: "Firmware directory", Placeholder: "e.g. ./firmware", Initial: os.Getenv("NODEMCU_FIRMWARE_DIR")}, true
+			return m, nil, ui.PromptRequest{Active: true, Kind: ui.PromptConfirmDelete, Label: "Flash Firmware bestätigen"}, true
 		}
 	}
 	return m, nil, ui.PromptRequest{}, false
@@ -125,14 +129,11 @@ func (m Model) OnPrompt(res ui.PromptResultMsg) (Model, tea.Cmd) {
 	}
 	if m.pendingAction == "Flash Firmware" {
 		m.pendingAction = ""
-		dir := strings.TrimSpace(res.Value)
-		if dir == "" {
-			dir = "."
-		}
 		m.busy, m.phase, m.done, m.total = true, "prepare", 0, 1
+		m.showProgress = true
 		ch := make(chan tea.Msg, 32)
 		m.progressCh = ch
-		return m, tea.Batch(status("Flashing firmware segments…"), runFlashFirmware(m.session, m.port, m.baud, dir, ch), listenProgress(ch))
+		return m, tea.Batch(status("Flashing embedded firmware…"), runFlashFirmware(m.session, m.port, m.baud, ch), listenProgress(ch))
 	}
 	return m, nil
 }
@@ -143,8 +144,11 @@ func (m Model) View() string {
 	}
 	title := ui.Accent.Render("Maintenance") + ui.Dim.Render(" · tiles")
 	cards := m.renderTiles()
-	bar := m.renderProgress()
-	return ui.Frame.Width(m.w-2).Height(m.h).Padding(0, 1).Render(title + "\n\n" + cards + "\n\n" + bar)
+	body := title + "\n\n" + cards
+	if p := m.renderProgress(); p != "" {
+		body += "\n\n" + p
+	}
+	return ui.Frame.Width(m.w-2).Height(m.h).Padding(0, 1).Render(body)
 }
 
 func (m Model) renderTiles() string {
@@ -171,21 +175,27 @@ func (m Model) renderTiles() string {
 }
 
 func (m Model) renderProgress() string {
+	if !m.showProgress {
+		return ""
+	}
 	phase := m.phase
 	if phase == "" {
 		phase = "idle"
 	}
 	if m.total <= 0 {
-		return ui.Dim.Render("Phase: " + phase)
+		return ui.Dim.Render(clampRunes("Phase: "+phase, ui.Max(10, m.w-8)))
 	}
-	w := ui.Max(10, m.w-20)
+	lineW := ui.Max(20, m.w-8)
+	w := ui.Max(10, lineW-28)
 	fill := int(float64(m.done) / float64(m.total) * float64(w))
 	if fill > w {
 		fill = w
 	}
 	bar := strings.Repeat("█", fill) + strings.Repeat("░", w-fill)
 	pct := int(float64(m.done) / float64(m.total) * 100)
-	return fmt.Sprintf("Phase: %s\n[%s] %d%%  %d / %d bytes", phase, bar, pct, m.done, m.total)
+	header := clampRunes(fmt.Sprintf("Phase: %s", phase), lineW)
+	stats := clampRunes(fmt.Sprintf(" %3d%%  %d/%d bytes", pct, m.done, m.total), lineW)
+	return header + "\n" + ui.Accent.Render("["+bar+"]") + stats
 }
 
 func listenProgress(ch <-chan tea.Msg) tea.Cmd {
@@ -274,10 +284,10 @@ func runEraseFlash(sess *repl.Session, port string, baud int) tea.Cmd {
 	}
 }
 
-func runFlashFirmware(sess *repl.Session, port string, baud int, dir string, ch chan<- tea.Msg) tea.Cmd {
+func runFlashFirmware(sess *repl.Session, port string, baud int, ch chan<- tea.Msg) tea.Cmd {
 	return func() tea.Msg {
 		defer close(ch)
-		segs := []flashSegment{{Offset: 0x0, Path: joinBin(dir, envOr("NODEMCU_BOOT_BIN", "0x00000.bin"))}, {Offset: 0x10000, Path: joinBin(dir, envOr("NODEMCU_APP_BIN", "0x10000.bin"))}}
+		segs := []flashSegment{{Offset: 0x0, Path: envOr("NODEMCU_BOOT_BIN", "0x00000.bin")}, {Offset: 0x10000, Path: envOr("NODEMCU_APP_BIN", "0x10000.bin")}}
 		report := func(phase string, done, total int) {
 			ch <- maintenanceProgressMsg{phase: phase, done: done, total: total}
 		}
@@ -316,11 +326,18 @@ func runFlashFirmware(sess *repl.Session, port string, baud int, dir string, ch 
 	}
 }
 
-func joinBin(dir, file string) string {
-	if strings.TrimSpace(dir) == "" || dir == "." {
-		return file
+func clampRunes(s string, max int) string {
+	if max <= 0 {
+		return ""
 	}
-	return dir + string(os.PathSeparator) + file
+	if utf8.RuneCountInString(s) <= max {
+		return s
+	}
+	r := []rune(s)
+	if max <= 1 {
+		return string(r[:max])
+	}
+	return string(r[:max-1]) + "…"
 }
 
 func envOr(name, fallback string) string {
