@@ -148,12 +148,12 @@ func (m Model) UpdateKeys(k tea.KeyMsg) (Model, tea.Cmd, bool) {
 
 	switch k.String() {
 
-	case "f2":
+	case "ctrl+l":
 		m.log = nil
 		m.refresh()
 		return m, statusInfo("Screen cleared"), true
 
-	case "f5":
+	case "ctrl+r":
 		return m.reconnect(), nil, true
 
 	case "ctrl+c":

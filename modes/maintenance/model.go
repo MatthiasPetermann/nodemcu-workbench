@@ -97,7 +97,7 @@ func (m Model) UpdateKeys(k tea.KeyMsg) (Model, tea.Cmd, ui.PromptRequest, bool)
 			m.cursor++
 		}
 		return m, nil, ui.PromptRequest{}, true
-	case "enter", "f5", "f8":
+	case "enter", "ctrl+o":
 		a := m.actions[m.cursor]
 		switch a {
 		case "Identify Device":

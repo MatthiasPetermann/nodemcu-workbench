@@ -36,11 +36,36 @@ func KeyBar(width int, keys []FKey) string {
 	for _, k := range keys {
 		chunks = append(chunks, Accent.Render(k.Key)+" "+Dim.Render(k.Label))
 	}
-	s := strings.Join(chunks, Dim.Render("  ·  "))
+	sep := Dim.Render("  ·  ")
+	line1 := ""
+	line2 := ""
+	maxWidth := width - 2
+	for _, c := range chunks {
+		if line1 == "" {
+			line1 = c
+			continue
+		}
+		candidate := line1 + sep + c
+		if lipgloss.Width(candidate) <= maxWidth {
+			line1 = candidate
+			continue
+		}
+		if line2 == "" {
+			line2 = c
+		} else {
+			line2 = line2 + sep + c
+		}
+	}
+	text := line1
+	height := 1
+	if line2 != "" {
+		text = line1 + "\n" + line2
+		height = 2
+	}
 	return lipgloss.NewStyle().
 		Width(width).
-		Height(1).
+		Height(height).
 		Background(T.BG).
 		Padding(0, 1).
-		Render(s)
+		Render(text)
 }
