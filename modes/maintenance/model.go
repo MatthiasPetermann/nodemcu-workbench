@@ -149,7 +149,6 @@ func (m Model) renderTiles() string {
 	tileH := ui.Max(5, (m.h-10)/len(m.actions))
 	parts := make([]string, 0, len(m.actions))
 	for i, a := range m.actions {
-		selected := i == m.cursor
 		st := lipgloss.NewStyle().
 			Width(cardW).
 			Height(tileH).
@@ -159,37 +158,22 @@ func (m Model) renderTiles() string {
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(ui.T.Border)
 		if i == m.cursor {
-			st = st.
-				Background(ui.T.Accent).
-				Foreground(ui.T.BG).
-				BorderForeground(ui.T.Accent2)
+			st = st.BorderForeground(ui.T.Accent)
 		}
 		sub, art := "", ""
 		switch a {
 		case "Identify Device":
 			sub = "Chip + MAC"
-			art = "     ┌─────────┐\n ─┬──┤    ?    ├──┬─\n ─┴──┤         ├──┴─\n     └─────────┘"
+			art = "     ┌─────────┐\n ─┬──┤    ?    ├──┬─\n ─┴──┤         ├──┴─\n└─────────┘"
 		case "Erase Flash":
 			sub = "Full flash erase"
-			art = "     ┌─────────┐\n ─┬──┤  XXXXX  ├──┬─\n ─┴──┤  XXXXX  ├──┴─\n     └─────────┘"
+			art = "     ┌─────────┐\n ─┬──┤  XXXXX  ├──┬─\n ─┴──┤  XXXXX  ├──┴─\n└─────────┘"
 		case "Flash Firmware":
 			sub = "0x00000.bin + 0x10000.bin"
-			art = "   ░░░░  ──▶\n     ┌─────────┐\n ─┬──┤  ░░░░░  ├──┬─\n ─┴──┤  ░░░░░  ├──┴─\n     └─────────┘"
+			art = "   ░░░░  ──▶\n     ┌─────────┐\n ─┬──┤  ░░░░░  ├──┬─\n ─┴──┤  ░░░░░  ├──┴─\n└─────────┘"
 		}
-		titleStyle := lipgloss.NewStyle().Bold(true)
-		subStyle := lipgloss.NewStyle().Foreground(ui.T.Dim)
-		iconStyle := lipgloss.NewStyle().Foreground(ui.T.Dim)
-		leftBG := ui.T.BG
-		rightBG := ui.T.BG
-		if selected {
-			titleStyle = titleStyle.Foreground(ui.T.BG)
-			subStyle = subStyle.Foreground(ui.T.BG)
-			iconStyle = iconStyle.Foreground(ui.T.BG)
-			leftBG = ui.T.Accent
-			rightBG = ui.T.Accent
-		}
-		left := lipgloss.NewStyle().Width(cardW - 24).Background(leftBG).Render(titleStyle.Render(a) + "\n" + subStyle.Render(sub))
-		right := lipgloss.NewStyle().Width(22).Align(lipgloss.Right).Background(rightBG).Render(iconStyle.Render(art))
+		left := lipgloss.NewStyle().Width(cardW - 24).Background(ui.T.BG).Render(ui.Accent.Render(a) + "\n" + ui.Dim.Render(sub))
+		right := lipgloss.NewStyle().Width(22).Align(lipgloss.Right).Background(ui.T.BG).Render(ui.Base.Render(art))
 		parts = append(parts, st.Render(lipgloss.JoinHorizontal(lipgloss.Top, left, right)))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
