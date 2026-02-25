@@ -44,6 +44,10 @@ type Model struct {
 	pendingDelete string
 }
 
+type uploadDoneMsg struct {
+	err error
+}
+
 /* =========================
    INIT
 ========================= */
@@ -71,11 +75,25 @@ func (m Model) SetSize(w, h int) Model {
 	return m
 }
 
+func (m Model) SetSession(sess *repl.Session) Model {
+	m.session = sess
+	m.refreshRemote()
+	return m
+}
+
 /* =========================
    UPDATE
 ========================= */
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case uploadDoneMsg:
+		if msg.err != nil {
+			return m, statusErr(msg.err)
+		}
+		m.refreshRemote()
+		return m, statusInfo("Uploaded")
+	}
 	return m, nil
 }
 
@@ -260,6 +278,9 @@ func (m Model) OnPrompt(res ui.PromptResultMsg) (Model, tea.Cmd) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 
+		if m.session == nil {
+			return m, statusErr(errors.New("not connected"))
+		}
 		if err := m.session.Remove(ctx, m.pendingDelete); err != nil {
 			return m, statusErr(err)
 		}
@@ -394,19 +415,21 @@ func (m Model) uploadCmd(path string) tea.Cmd {
 	return func() tea.Msg {
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return ui.StatusMsg{Kind: ui.StatusError, Text: err.Error()}
+			return uploadDoneMsg{err: err}
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		err = m.session.WriteFile(ctx, filepath.Base(path), data, nil)
-		if err != nil {
-			return ui.StatusMsg{Kind: ui.StatusError, Text: err.Error()}
+		if m.session == nil {
+			return uploadDoneMsg{err: errors.New("not connected")}
 		}
 
-		m.refreshRemote()
-		return ui.StatusMsg{Kind: ui.StatusInfo, Text: "Uploaded"}
+		err = m.session.WriteFile(ctx, filepath.Base(path), data, nil)
+		if err != nil {
+			return uploadDoneMsg{err: err}
+		}
+		return uploadDoneMsg{}
 	}
 }
 
@@ -419,7 +442,10 @@ func readDir(dir string) []entry {
 	if err != nil {
 		return nil
 	}
-	type tmp struct{ n string; d bool }
+	type tmp struct {
+		n string
+		d bool
+	}
 	t := []tmp{}
 	for _, d := range des {
 		t = append(t, tmp{d.Name(), d.IsDir()})

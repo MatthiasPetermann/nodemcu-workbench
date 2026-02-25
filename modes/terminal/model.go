@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
+	tea "github.com/charmbracelet/bubbletea"
 
 	"nodemcu-workbench/repl"
 	"nodemcu-workbench/ui"
@@ -98,8 +98,20 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
+func (m Model) SetSession(sess *repl.Session) Model {
+	m.session = sess
+	m.connected = sess != nil
+	if sess == nil {
+		m.append(ui.Warn.Render("serial released (maintenance mode)"))
+	} else {
+		m.append(ui.Ok.Render("serial connected"))
+	}
+	m.refresh()
+	return m
+}
+
 /*
-   Internal messages
+Internal messages
 */
 type replContinueMsg struct{}
 type replDoneMsg struct {

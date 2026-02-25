@@ -1,10 +1,12 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
+	"unicode/utf8"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -14,6 +16,11 @@ type StatusLine struct {
 	hasStatus bool
 	kind      StatusKind
 	text      string
+
+	progressActive bool
+	progressPhase  string
+	progressDone   int
+	progressTotal  int
 
 	promptActive bool
 	promptKind   PromptKind
@@ -44,6 +51,14 @@ func (s StatusLine) SetStatus(k StatusKind, txt string) StatusLine {
 	return s
 }
 
+func (s StatusLine) SetProgress(active bool, phase string, done, total int) StatusLine {
+	s.progressActive = active
+	s.progressPhase = phase
+	s.progressDone = done
+	s.progressTotal = total
+	return s
+}
+
 func (s StatusLine) BeginPrompt(kind PromptKind, label, placeholder, initial string) StatusLine {
 	s.promptActive = true
 	s.promptKind = kind
@@ -67,6 +82,16 @@ func (s StatusLine) Update(msg tea.KeyMsg) (StatusLine, tea.Cmd) {
 	if !s.promptActive {
 		return s, nil
 	}
+	if s.promptKind == PromptConfirmDelete {
+		switch msg.String() {
+		case "esc":
+			return s, func() tea.Msg { return PromptResultMsg{Kind: s.promptKind, Accepted: false, Value: ""} }
+		case "enter":
+			return s, func() tea.Msg { return PromptResultMsg{Kind: s.promptKind, Accepted: true, Value: ""} }
+		default:
+			return s, nil
+		}
+	}
 	switch msg.String() {
 	case "esc":
 		return s, func() tea.Msg { return PromptResultMsg{Kind: s.promptKind, Accepted: false, Value: ""} }
@@ -89,8 +114,37 @@ func (s StatusLine) View() string {
 		Padding(0, 1)
 
 	if s.promptActive {
-		lbl := Warn.Render(s.promptLabel) + Dim.Render(": ")
+		if s.promptKind == PromptConfirmDelete {
+			msg := clampRunes(s.promptLabel+" · Enter=Bestätigen · Esc=Abbrechen", Max(1, s.width-8))
+			return style.Render(Warn.Render(msg))
+		}
+		lbl := Warn.Render(clampRunes(s.promptLabel, Max(1, s.width-24))) + Dim.Render(": ")
 		return style.Render(lbl + s.input.View() + Dim.Render("  (Enter=OK · Esc=Cancel)"))
+	}
+
+	if s.progressActive {
+		inner := Max(10, s.width-8)
+		phase := clampRunes("FLASH "+s.progressPhase, inner/3)
+		total := s.progressTotal
+		if total <= 0 {
+			total = 1
+		}
+		done := s.progressDone
+		if done < 0 {
+			done = 0
+		}
+		if done > total {
+			done = total
+		}
+		barW := Max(8, inner-len(phase)-20)
+		fill := int(float64(done) / float64(total) * float64(barW))
+		if fill > barW {
+			fill = barW
+		}
+		bar := strings.Repeat("█", fill) + strings.Repeat("░", barW-fill)
+		pct := int(float64(done) / float64(total) * 100)
+		line := clampRunes(phase+" ["+bar+"] "+fmt.Sprintf("%3d%% %d/%d", pct, done, total), inner)
+		return style.Render(Accent.Render(line))
 	}
 
 	txt := "Ready"
@@ -106,4 +160,18 @@ func (s StatusLine) View() string {
 	default:
 		return style.Render(Base.Render(txt))
 	}
+}
+
+func clampRunes(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	if utf8.RuneCountInString(s) <= max {
+		return s
+	}
+	r := []rune(s)
+	if max <= 1 {
+		return string(r[:max])
+	}
+	return string(r[:max-1]) + "…"
 }
