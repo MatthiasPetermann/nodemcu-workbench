@@ -14,16 +14,33 @@ type FKey struct {
 func Header(width int, tool string, mode Mode, ctx string) string {
 	innerW := Max(1, width-2)
 	left := Accent.Render(tool) + " " + Dim.Render("·") + " " + Pill.BorderForeground(T.Accent).Render(mode.String())
-	right := ""
-	if strings.TrimSpace(ctx) != "" {
-		right = Dim.Render(ctx)
+
+	rightPlain := strings.TrimSpace(ctx)
+	if rightPlain != "" {
+		maxRight := innerW - lipgloss.Width(left) - 1
+		if maxRight < 0 {
+			maxRight = 0
+		}
+		if lipgloss.Width(rightPlain) > maxRight {
+			r := []rune(rightPlain)
+			if maxRight <= 1 {
+				rightPlain = ""
+			} else {
+				rightPlain = string(r[:maxRight-1]) + "…"
+			}
+		}
 	}
+
+	right := ""
+	if rightPlain != "" {
+		right = Dim.Render(rightPlain)
+	}
+
 	space := innerW - lipgloss.Width(left) - lipgloss.Width(right)
 	if space < 1 {
 		space = 1
 	}
 	line := left + strings.Repeat(" ", space) + right
-	line = lipgloss.NewStyle().Width(innerW).MaxWidth(innerW).Render(line)
 
 	return lipgloss.NewStyle().
 		Width(width).
