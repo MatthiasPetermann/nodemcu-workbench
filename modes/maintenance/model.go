@@ -104,7 +104,7 @@ func (m Model) UpdateKeys(k tea.KeyMsg) (Model, tea.Cmd, ui.PromptRequest, bool)
 			return m, tea.Batch(status("Detecting ESP device…"), runIdentify(m.session, m.port, m.baud)), ui.PromptRequest{}, true
 		case "Erase Flash":
 			m.pendingAction = a
-			return m, nil, ui.PromptRequest{Active: true, Kind: ui.PromptConfirmDelete, Label: "Erase Flash? (y/n)", Initial: "n"}, true
+			return m, nil, ui.PromptRequest{Active: true, Kind: ui.PromptConfirmDelete, Label: "Erase Flash bestätigen"}, true
 		case "Flash Firmware":
 			m.pendingAction = a
 			return m, nil, ui.PromptRequest{Active: true, Kind: ui.PromptNewFile, Label: "Firmware directory", Placeholder: "e.g. ./firmware", Initial: os.Getenv("NODEMCU_FIRMWARE_DIR")}, true
@@ -119,10 +119,6 @@ func (m Model) OnPrompt(res ui.PromptResultMsg) (Model, tea.Cmd) {
 		return m, status("Cancelled")
 	}
 	if m.pendingAction == "Erase Flash" {
-		if strings.ToLower(strings.TrimSpace(res.Value)) != "y" {
-			m.pendingAction = ""
-			return m, status("Cancelled")
-		}
 		m.pendingAction = ""
 		m.busy, m.phase, m.done, m.total = true, "erase", 0, 1
 		return m, tea.Batch(status("Erasing flash…"), runEraseFlash(m.session, m.port, m.baud))

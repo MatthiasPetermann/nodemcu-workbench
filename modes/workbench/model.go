@@ -44,6 +44,10 @@ type Model struct {
 	pendingDelete string
 }
 
+type uploadDoneMsg struct {
+	err error
+}
+
 /* =========================
    INIT
 ========================= */
@@ -82,6 +86,14 @@ func (m Model) SetSession(sess *repl.Session) Model {
 ========================= */
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case uploadDoneMsg:
+		if msg.err != nil {
+			return m, statusErr(msg.err)
+		}
+		m.refreshRemote()
+		return m, statusInfo("Uploaded")
+	}
 	return m, nil
 }
 
@@ -403,23 +415,21 @@ func (m Model) uploadCmd(path string) tea.Cmd {
 	return func() tea.Msg {
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return ui.StatusMsg{Kind: ui.StatusError, Text: err.Error()}
+			return uploadDoneMsg{err: err}
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
 		if m.session == nil {
-			return ui.StatusMsg{Kind: ui.StatusError, Text: "not connected"}
+			return uploadDoneMsg{err: errors.New("not connected")}
 		}
 
 		err = m.session.WriteFile(ctx, filepath.Base(path), data, nil)
 		if err != nil {
-			return ui.StatusMsg{Kind: ui.StatusError, Text: err.Error()}
+			return uploadDoneMsg{err: err}
 		}
-
-		m.refreshRemote()
-		return ui.StatusMsg{Kind: ui.StatusInfo, Text: "Uploaded"}
+		return uploadDoneMsg{}
 	}
 }
 

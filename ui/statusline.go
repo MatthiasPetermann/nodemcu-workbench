@@ -2,9 +2,10 @@ package ui
 
 import (
 	"strings"
+	"unicode/utf8"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -67,6 +68,16 @@ func (s StatusLine) Update(msg tea.KeyMsg) (StatusLine, tea.Cmd) {
 	if !s.promptActive {
 		return s, nil
 	}
+	if s.promptKind == PromptConfirmDelete {
+		switch msg.String() {
+		case "esc":
+			return s, func() tea.Msg { return PromptResultMsg{Kind: s.promptKind, Accepted: false, Value: ""} }
+		case "enter":
+			return s, func() tea.Msg { return PromptResultMsg{Kind: s.promptKind, Accepted: true, Value: ""} }
+		default:
+			return s, nil
+		}
+	}
 	switch msg.String() {
 	case "esc":
 		return s, func() tea.Msg { return PromptResultMsg{Kind: s.promptKind, Accepted: false, Value: ""} }
@@ -89,7 +100,11 @@ func (s StatusLine) View() string {
 		Padding(0, 1)
 
 	if s.promptActive {
-		lbl := Warn.Render(s.promptLabel) + Dim.Render(": ")
+		if s.promptKind == PromptConfirmDelete {
+			msg := clampRunes(s.promptLabel+" · Enter=Bestätigen · Esc=Abbrechen", Max(1, s.width-8))
+			return style.Render(Warn.Render(msg))
+		}
+		lbl := Warn.Render(clampRunes(s.promptLabel, Max(1, s.width-24))) + Dim.Render(": ")
 		return style.Render(lbl + s.input.View() + Dim.Render("  (Enter=OK · Esc=Cancel)"))
 	}
 
@@ -106,4 +121,18 @@ func (s StatusLine) View() string {
 	default:
 		return style.Render(Base.Render(txt))
 	}
+}
+
+func clampRunes(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	if utf8.RuneCountInString(s) <= max {
+		return s
+	}
+	r := []rune(s)
+	if max <= 1 {
+		return string(r[:max])
+	}
+	return string(r[:max-1]) + "…"
 }
