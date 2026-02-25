@@ -97,7 +97,7 @@ func (m Model) UpdateKeys(k tea.KeyMsg) (Model, tea.Cmd, ui.PromptRequest, bool)
 			m.cursor++
 		}
 		return m, nil, ui.PromptRequest{}, true
-	case "enter", "f5", "f8":
+	case "enter", "ctrl+o":
 		a := m.actions[m.cursor]
 		switch a {
 		case "Identify Device":
@@ -138,7 +138,7 @@ func (m Model) View() string {
 	if m.w <= 0 || m.h <= 0 {
 		return ""
 	}
-	title := ui.Accent.Render("Maintenance") + ui.Dim.Render(" · vertical tiles")
+	title := ui.Accent.Render("Maintenance")
 	cards := m.renderTiles()
 	body := title + "\n\n" + cards
 	return ui.Frame.Width(m.w-2).Height(m.h).Padding(0, 1).Render(body)

@@ -148,12 +148,12 @@ func (m Model) UpdateKeys(k tea.KeyMsg) (Model, tea.Cmd, bool) {
 
 	switch k.String() {
 
-	case "f2":
+	case "ctrl+l":
 		m.log = nil
 		m.refresh()
 		return m, statusInfo("Screen cleared"), true
 
-	case "f5":
+	case "ctrl+r":
 		return m.reconnect(), nil, true
 
 	case "ctrl+c":
@@ -254,8 +254,7 @@ func (m Model) View() string {
 	w := ui.Max(1, m.w)
 	h := ui.Max(1, m.h)
 
-	title := ui.Accent.Render("Terminal") +
-		ui.Dim.Render(" · F2 clear · F5 reconnect")
+	title := ui.Accent.Render("Terminal")
 
 	sep := ui.Rule.Render(strings.Repeat("─", ui.Max(0, w-6)))
 

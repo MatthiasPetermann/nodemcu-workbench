@@ -108,6 +108,15 @@ func (m Model) UpdateKeys(k tea.KeyMsg) (Model, tea.Cmd, ui.PromptRequest, bool)
 		}, true
 	}
 
+	if k.String() == "ctrl+g" && m.activeLeft {
+		return m, nil, ui.PromptRequest{
+			Active:      true,
+			Kind:        ui.PromptNewDir,
+			Label:       "New directory",
+			Placeholder: "e.g. firmware",
+		}, true
+	}
+
 	switch k.String() {
 
 	case "tab":
@@ -157,12 +166,12 @@ func (m Model) UpdateKeys(k tea.KeyMsg) (Model, tea.Cmd, ui.PromptRequest, bool)
 		}
 		return m, nil, ui.PromptRequest{}, true
 
-	case "f2":
+	case "ctrl+r":
 		m.left.entries = readDir(m.left.cwd)
 		m.refreshRemote()
 		return m, statusInfo("Refreshed"), ui.PromptRequest{}, true
 
-	case "f4":
+	case "ctrl+e":
 		if !m.activeLeft {
 			return m, nil, ui.PromptRequest{}, true
 		}
@@ -172,7 +181,7 @@ func (m Model) UpdateKeys(k tea.KeyMsg) (Model, tea.Cmd, ui.PromptRequest, bool)
 		}
 		return m, execNano(path), ui.PromptRequest{}, true
 
-	case "f5":
+	case "ctrl+o":
 		if m.activeLeft {
 			src, err := m.selectedPath()
 			if err != nil {
@@ -182,7 +191,7 @@ func (m Model) UpdateKeys(k tea.KeyMsg) (Model, tea.Cmd, ui.PromptRequest, bool)
 		}
 		return m, nil, ui.PromptRequest{}, true
 
-	case "f6":
+	case "ctrl+t":
 		if !m.activeLeft {
 			return m, nil, ui.PromptRequest{}, true
 		}
@@ -198,18 +207,7 @@ func (m Model) UpdateKeys(k tea.KeyMsg) (Model, tea.Cmd, ui.PromptRequest, bool)
 			Placeholder: filepath.Base(path),
 		}, true
 
-	case "f7":
-		if !m.activeLeft {
-			return m, nil, ui.PromptRequest{}, true
-		}
-		return m, nil, ui.PromptRequest{
-			Active:      true,
-			Kind:        ui.PromptNewDir,
-			Label:       "New directory",
-			Placeholder: "e.g. firmware",
-		}, true
-
-	case "f8":
+	case "ctrl+k":
 		p := m.activePane()
 		if len(p.entries) == 0 {
 			return m, nil, ui.PromptRequest{}, true

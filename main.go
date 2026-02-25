@@ -85,7 +85,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" || msg.String() == "f10" {
+		if msg.String() == "ctrl+x" {
 			if m.sess != nil {
 				_ = m.sess.Close()
 			}
@@ -96,7 +96,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status, cmd = m.status.Update(msg)
 			return m, cmd
 		}
-		if msg.String() == "f9" {
+		if msg.String() == "ctrl+w" {
 			m.mode = (m.mode + 1) % 3
 			m.status = m.status.SetStatus(ui.StatusInfo, "Switched to "+m.mode.String())
 			return m, nil
@@ -177,17 +177,17 @@ func (m appModel) View() string {
 func (m appModel) keys() []ui.FKey {
 	switch m.mode {
 	case ui.ModeWorkbench:
-		return []ui.FKey{{Key: "F2", Label: "Refresh"}, {Key: "F4", Label: "Edit"}, {Key: "F5", Label: "Copy"}, {Key: "F6", Label: "Rename"}, {Key: "F7", Label: "New Dir"}, {Key: "F8", Label: "Delete"}, {Key: "F9", Label: "Mode"}, {Key: "F10", Label: "Quit"}}
+		return []ui.FKey{{Key: "^R", Label: "Refresh"}, {Key: "^E", Label: "Edit"}, {Key: "^O", Label: "Upload"}, {Key: "^T", Label: "Rename"}, {Key: "^N", Label: "New File"}, {Key: "^G", Label: "New Dir"}, {Key: "^K", Label: "Delete"}, {Key: "^W", Label: "Mode"}, {Key: "^X", Label: "Quit"}}
 	case ui.ModeTerminal:
-		return []ui.FKey{{Key: "F2", Label: "Clear"}, {Key: "F5", Label: "Reconnect"}, {Key: "F9", Label: "Mode"}, {Key: "F10", Label: "Quit"}}
+		return []ui.FKey{{Key: "^L", Label: "Clear"}, {Key: "^R", Label: "Reconnect"}, {Key: "^C", Label: "Interrupt"}, {Key: "^W", Label: "Mode"}, {Key: "^X", Label: "Quit"}}
 	case ui.ModeMaintenance:
-		return []ui.FKey{{Key: "F5", Label: "Select"}, {Key: "F8", Label: "Flash"}, {Key: "F9", Label: "Mode"}, {Key: "F10", Label: "Quit"}}
+		return []ui.FKey{{Key: "Enter", Label: "Select"}, {Key: "^O", Label: "Execute"}, {Key: "^W", Label: "Mode"}, {Key: "^X", Label: "Quit"}}
 	}
-	return []ui.FKey{{Key: "F9", Label: "Mode"}, {Key: "F10", Label: "Quit"}}
+	return []ui.FKey{{Key: "^W", Label: "Mode"}, {Key: "^X", Label: "Quit"}}
 }
 
 func (m appModel) contentSize() (int, int) {
-	ch := m.h - 6
+	ch := m.h - 8
 	if ch < 1 {
 		ch = 1
 	}
