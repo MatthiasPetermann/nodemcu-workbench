@@ -13,7 +13,8 @@ type FKey struct {
 
 func Header(width int, tool string, mode Mode, ctx string) string {
 	innerW := Max(1, width-2)
-	left := Accent.Render(tool) + " " + Dim.Render("·") + " " + Pill.BorderForeground(T.Accent).Render(mode.String())
+	modeTag := Accent.Render("[" + mode.String() + "]")
+	left := Accent.Render(tool) + " " + Dim.Render("·") + " " + modeTag
 
 	rightPlain := strings.TrimSpace(ctx)
 	if rightPlain != "" {
