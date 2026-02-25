@@ -1,104 +1,117 @@
 # NodeMCU Workbench
 
-`nodemcu-workbench` ist eine terminalbasierte All-in-One-Oberfläche für NodeMCU/ESP-Geräte.
-Die App kombiniert drei Arbeitsbereiche in einem TUI-Programm:
+`nodemcu-workbench` is a terminal-based, low-barrier all-in-one app for NodeMCU/ESP8266.
 
-1. **Workbench** (Dateiverwaltung + Upload auf den NodeMCU-Dateisystembereich)
-2. **Terminal** (interaktive REPL)
-3. **Maintenance** (Geräteerkennung, Flash löschen, Firmware flashen)
+The app grew out of real-world work with children: the goal was to build a tool that enables **simple, integrated, and accessible development** — without tool sprawl, without complex setup, and with clear keyboard-driven workflows.
 
-Die Bedienung ist an klassische 2-Pane-Dateimanager angelehnt und auf schnelle Tastatur-Workflows ausgelegt.
+Design principles:
+
+- **Standalone package** instead of many separate tools
+- **Firmware embedded directly**, so flashing works out of the box
+- **Minimal project management** via a file manager (local + on-device filesystem)
+- **Integrated REPL** for fast experimentation in the same program
+
+Context / background:
+
+- Blog post: <https://www.petermann-digital.de/blog/nodemcu-from-scratch/>
 
 ---
 
-## Funktionsumfang
+## Overview
 
-### 1) Workbench-Modus
+The app combines three modes in a single TUI program:
 
-- Zweispaltige Ansicht:
-  - **Links:** Lokales Dateisystem
-  - **Rechts:** Dateien auf dem NodeMCU (`file.list()`)
-- Lokale Dateiverwaltung:
-  - Verzeichnisse öffnen / eine Ebene zurück
-  - Neue Datei anlegen
-  - Datei/Ordner umbenennen
-  - Neues Verzeichnis erstellen
-  - Datei/Ordner löschen (mit Bestätigung)
-  - Datei in `nano` bearbeiten
+1. **Workbench** – local file manager + NodeMCU files + upload/delete
+2. **Terminal** – interactive REPL with continuation handling
+3. **Maintenance** – identify, erase, flash with embedded firmware
+
+---
+
+## Current feature set (code-aligned)
+
+### 1) Workbench mode
+
+- Two-pane view:
+  - **Left:** local filesystem
+  - **Right:** files on the NodeMCU filesystem (`file.list()`)
+- Local file operations:
+  - Enter directories / go one level up
+  - Create new files
+  - Rename files or folders
+  - Create new directories
+  - Delete files/folders (with confirmation)
+  - Edit files in `nano`
 - Upload:
-  - Auswahl im linken Pane mit **F5** direkt auf den NodeMCU hochladen
-  - Upload über REPL (`file.open`, `f:write`, `f:close`) in kleinen Chunks
-- Remote-Löschen:
-  - Datei im rechten Pane auswählen und mit **F8** löschen (mit Bestätigung)
+  - Upload selected local file to the board
+- Remote delete:
+  - Delete selected file in the right pane (with confirmation)
 
-### 2) Terminal-Modus
+### 2) Terminal mode
 
-- Interaktive REPL-Konsole mit Eingabefeld und Scroll-Viewport
-- Unterstützt Lua-Continuation (`>>`) automatisch
-- **Ctrl+C** unterbricht laufende Eingaben
-- **F2** leert die Anzeige
-- **F5** synchronisiert/reconnectet die bestehende Session
+- Interactive REPL console with input line + scrollable viewport
+- Automatic handling of Lua continuation (`>>`)
+- `Ctrl+C` interrupts running multi-line input
+- `Ctrl+L` clears the output
+- `Ctrl+R` syncs/reconnects the session
 
-### 3) Maintenance-Modus
+### 3) Maintenance mode
 
-- Kachelansicht für Service-Aktionen:
-  - **Identify Device** (Chip + MAC auslesen)
-  - **Erase Flash** (kompletten Flash löschen)
-  - **Flash Firmware** (zwei Segmente flashen)
-- Flashing nutzt eingebettete Firmware-Dateien:
+- Actions:
+  - **Identify Device** (chip + MAC)
+  - **Erase Flash** (full flash erase)
+  - **Flash Firmware** (2 segments)
+- Embedded firmware segments:
   - `0x00000.bin` @ `0x00000000`
   - `0x10000.bin` @ `0x00010000`
-- Fortschritt wird im Statusbereich live angezeigt
-- Serielle Schnittstelle wird exklusiv genutzt, damit REPL und Flasher sich nicht in die Quere kommen
+- Live progress reporting in the status line
+- Exclusive serial port access during maintenance actions
 
 ---
 
-## Bedienung (global)
+## Keyboard controls
 
-- **F9**: Zwischen Modi wechseln (`Workbench -> Terminal -> Maintenance`)
-- **F10** oder **Ctrl+C**: Programm beenden
+> Note: the keybar in the UI displays shortcuts in the form `^X`.
 
-Die Funktionsleiste unten zeigt je Modus die verfügbaren Aktionen an.
+### Global
 
----
-
-## Tastenkürzel nach Modus
+- `Ctrl+W` – switch mode (`Workbench -> Terminal -> Maintenance`)
+- `Ctrl+X` – quit the program
 
 ### Workbench
 
-- `Tab` aktives Pane wechseln
-- `↑/↓` Auswahl bewegen
-- `Enter` Verzeichnis öffnen (nur links)
-- `Backspace` Verzeichnis nach oben (nur links)
-- `Ctrl+N` neue Datei anlegen (nur links)
-- `F2` beide Seiten aktualisieren
-- `F4` ausgewählte lokale Datei mit `nano` öffnen
-- `F5` ausgewählte lokale Datei hochladen
-- `F6` lokal umbenennen
-- `F7` lokales Verzeichnis erstellen
-- `F8` löschen (lokal oder remote, je nach aktivem Pane)
+- `Tab` – switch active pane
+- `↑ / ↓` – move selection
+- `Enter` – open directory (left pane)
+- `Backspace` – go up one level (left pane)
+- `Ctrl+R` – refresh both sides
+- `Ctrl+E` – open selected local file in `nano`
+- `Ctrl+O` – upload selected local file
+- `Ctrl+T` – rename locally
+- `Ctrl+N` – create new file
+- `Ctrl+G` – create new local directory
+- `Ctrl+K` – delete (local or remote depending on active pane)
 
 ### Terminal
 
-- `Enter` Zeile an REPL senden
-- `Ctrl+C` laufende/mehrzeilige Eingabe abbrechen
-- `F2` Log-Ausgabe leeren
-- `F5` REPL neu synchronisieren
-- `PgUp/PgDown`, `↑/↓` scrollen
+- `Enter` – send line to REPL
+- `Ctrl+C` – interrupt multi-line input
+- `Ctrl+L` – clear output
+- `Ctrl+R` – sync/reconnect REPL
+- `PgUp / PgDown / ↑ / ↓` – scroll
 
 ### Maintenance
 
-- `↑/↓` oder `←/→` Aktion wählen
-- `Enter` / `F5` / `F8` gewählte Aktion starten
-- Bei destruktiven Aktionen erfolgt eine Bestätigung
+- `← / → / ↑ / ↓` – select action
+- `Enter` or `Ctrl+O` – run selected action
+- Destructive actions require confirmation
 
 ---
 
-## Voraussetzungen
+## Requirements
 
 - Go **1.22+**
-- Linux/macOS mit serieller NodeMCU/ESP-Verbindung
-- Optional: `nano` (für `F4` im Workbench-Modus)
+- Linux/macOS with a serial NodeMCU/ESP connection
+- Optional: `nano` (for editing in Workbench)
 
 ---
 
@@ -108,13 +121,13 @@ Die Funktionsleiste unten zeigt je Modus die verfügbaren Aktionen an.
 make build
 ```
 
-Erzeugt das Binary unter:
+Binary:
 
 ```text
 bin/nodemcu-workbench
 ```
 
-Alternativ direkt mit Go:
+Alternative:
 
 ```bash
 go build -o bin/nodemcu-workbench
@@ -122,58 +135,58 @@ go build -o bin/nodemcu-workbench
 
 ---
 
-## Start
+## Run
 
-Standardmäßig wird der Port aus `NODEMCU_PORT` gelesen, ansonsten `/dev/ttyUSB0` verwendet.
-Baudrate ist aktuell fest auf `115200`.
+Default port: `NODEMCU_PORT`, fallback `/dev/ttyUSB0`.
+Baud rate: `115200`.
 
 ```bash
 NODEMCU_PORT=/dev/ttyUSB0 ./bin/nodemcu-workbench
 ```
 
-Wenn keine Verbindung aufgebaut werden kann, startet die UI trotzdem; Funktionen, die eine Session brauchen, melden dann entsprechend „not connected“.
+If a connection cannot be established, the UI still starts; affected functions then report `not connected`.
 
 ---
 
-## Firmware für Maintenance einbetten
+## Embedding firmware (Maintenance)
 
-Für den Flash-Modus müssen die Firmware-Dateien im Repository vorhanden sein, bevor du baust:
+Before building, the firmware files must exist:
 
 ```text
 modes/maintenance/embedded/0x00000.bin
 modes/maintenance/embedded/0x10000.bin
 ```
 
-Die Dateien werden beim Build eingebettet (`go:embed`).
+These files are embedded into the binary via `go:embed`.
 
-Optional kannst du die Dateinamen/-pfade über Umgebungsvariablen umbiegen:
+Optional configuration:
 
-- `NODEMCU_BOOT_BIN` (Default: `0x00000.bin`)
-- `NODEMCU_APP_BIN` (Default: `0x10000.bin`)
+- `NODEMCU_BOOT_BIN` (default: `0x00000.bin`)
+- `NODEMCU_APP_BIN` (default: `0x10000.bin`)
 
-> Hinweis: Es wird immer nach dem **Basename** im eingebetteten `embedded/`-Verzeichnis gesucht.
-
----
-
-## Projektstruktur (Kurzüberblick)
-
-- `main.go` – App-Start, Layout, globales Routing, Moduswechsel
-- `modes/workbench` – Dateimanager + Upload/Löschen
-- `modes/terminal` – REPL-UI mit Continuation-Handling
-- `modes/maintenance` – ESP-Bootloader-Aktionen (Identify/Erase/Flash)
-- `repl/session.go` – serielle REPL-Session inkl. Prompt-Erkennung (`>`, `>>`)
-- `ui/` – Theme, Header, Statusline, Keybar, Layout-Bausteine
+> The app always resolves the **basename** within the embedded `embedded/` directory.
 
 ---
 
-## Sicherheitshinweise
+## Project structure
 
-- **Erase Flash** löscht den Gerätespeicher vollständig.
-- **Flash Firmware** überschreibt Firmwarebereiche (`0x0`, `0x10000`).
-- Vor Wartungsaktionen prüfen, dass der richtige Port gewählt ist.
+- `main.go` – app startup, global routing, mode switching, keybar
+- `modes/workbench` – file manager + upload/delete
+- `modes/terminal` – REPL UI with continuation handling
+- `modes/maintenance` – identify/erase/flash
+- `repl/session.go` – serial session, prompt detection (`>`, `>>`)
+- `ui/` – theme, header, status line, layout components
 
 ---
 
-## Lizenz
+## Safety
 
-Siehe [`LICENSE`](./LICENSE).
+- **Erase Flash** wipes the entire device flash.
+- **Flash Firmware** overwrites firmware regions (`0x0`, `0x10000`).
+- Verify port/board before running maintenance actions.
+
+---
+
+## License
+
+See [`LICENSE`](./LICENSE).
