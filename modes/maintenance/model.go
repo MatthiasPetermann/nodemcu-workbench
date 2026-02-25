@@ -157,16 +157,16 @@ func (m Model) renderTiles() string {
 		switch a {
 		case "Identify Device":
 			sub = "Chip + MAC"
-			art = "  .-.-.\n ( o o )\n  | O |"
+			art = "     ┌─────────┐\n ─┬──┤    ?    ├──┬─\n ─┴──┤         ├──┴─\n     └─────────┘"
 		case "Erase Flash":
 			sub = "Full flash erase"
-			art = " [#####]\n  |||\n   ---"
+			art = "     ┌─────────┐\n ─┬──┤  XXXXX  ├──┬─\n ─┴──┤  XXXXX  ├──┴─\n     └─────────┘"
 		case "Flash Firmware":
 			sub = "0x00000.bin + 0x10000.bin"
-			art = "  ____\n / __/\n/_/==>"
+			art = "   ░░░░  ──▶\n     ┌─────────┐\n ─┬──┤  ░░░░░  ├──┬─\n ─┴──┤  ░░░░░  ├──┴─\n     └─────────┘"
 		}
-		left := lipgloss.NewStyle().Width(cardW - 14).Render(ui.Accent.Render(a) + "\n" + ui.Dim.Render(sub))
-		right := lipgloss.NewStyle().Width(12).Align(lipgloss.Right).Render(ui.Dim.Render(art))
+		left := lipgloss.NewStyle().Width(cardW - 24).Render(ui.Accent.Render(a) + "\n" + ui.Dim.Render(sub))
+		right := lipgloss.NewStyle().Width(22).Align(lipgloss.Right).Background(ui.T.BG).Render(ui.Base.Render(art))
 		parts = append(parts, st.Render(lipgloss.JoinHorizontal(lipgloss.Top, left, right)))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
