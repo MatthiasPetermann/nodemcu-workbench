@@ -149,6 +149,7 @@ func (m Model) renderTiles() string {
 	tileH := ui.Max(5, (m.h-10)/len(m.actions))
 	parts := make([]string, 0, len(m.actions))
 	for i, a := range m.actions {
+		leftW := cardW - 24
 		st := lipgloss.NewStyle().
 			Width(cardW).
 			Height(tileH).
@@ -164,16 +165,21 @@ func (m Model) renderTiles() string {
 		switch a {
 		case "Identify Device":
 			sub = "Chip + MAC"
-			art = "     ┌─────────┐\n ─┬──┤    ?    ├──┬─\n ─┴──┤         ├──┴─\n└─────────┘"
+			art = "     ┌─────────┐\n ─┬──┤    ?    ├──┬─\n ─┴──┤         ├──┴─\n     └─────────┘"
 		case "Erase Flash":
 			sub = "Full flash erase"
-			art = "     ┌─────────┐\n ─┬──┤  XXXXX  ├──┬─\n ─┴──┤  XXXXX  ├──┴─\n└─────────┘"
+			art = "     ┌─────────┐\n ─┬──┤  XXXXX  ├──┬─\n ─┴──┤  XXXXX  ├──┴─\n     └─────────┘"
 		case "Flash Firmware":
 			sub = "0x00000.bin + 0x10000.bin"
-			art = "   ░░░░  ──▶\n     ┌─────────┐\n ─┬──┤  ░░░░░  ├──┬─\n ─┴──┤  ░░░░░  ├──┴─\n└─────────┘"
+			art = "   ░░░░  ──▶\n     ┌─────────┐\n ─┬──┤  ░░░░░  ├──┬─\n ─┴──┤  ░░░░░  ├──┴─\n     └─────────┘"
 		}
-		left := lipgloss.NewStyle().Width(cardW - 24).Background(ui.T.BG).Render(ui.Accent.Render(a) + "\n" + ui.Dim.Render(sub))
-		right := lipgloss.NewStyle().Width(22).Align(lipgloss.Right).Background(ui.T.BG).Render(ui.Base.Render(art))
+
+		title := lipgloss.NewStyle().Width(leftW).Foreground(ui.T.Accent).Render(a)
+		if i == m.cursor {
+			title = lipgloss.NewStyle().Width(leftW).Background(ui.T.Accent).Foreground(ui.T.BG).Bold(true).Render(a)
+		}
+		left := lipgloss.NewStyle().Width(leftW).Background(ui.T.BG).Render(title + "\n" + ui.Dim.Render(sub))
+		right := lipgloss.NewStyle().Width(22).Align(lipgloss.Right).Background(ui.T.BG).Render(ui.Base.Render("\n\n" + art))
 		parts = append(parts, st.Render(lipgloss.JoinHorizontal(lipgloss.Top, left, right)))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
