@@ -12,16 +12,18 @@ type FKey struct {
 }
 
 func Header(width int, tool string, mode Mode, ctx string) string {
+	innerW := Max(1, width-2)
 	left := Accent.Render(tool) + " " + Dim.Render("·") + " " + Pill.BorderForeground(T.Accent).Render(mode.String())
 	right := ""
 	if strings.TrimSpace(ctx) != "" {
 		right = Dim.Render(ctx)
 	}
-	space := width - lipgloss.Width(left) - lipgloss.Width(right)
+	space := innerW - lipgloss.Width(left) - lipgloss.Width(right)
 	if space < 1 {
 		space = 1
 	}
 	line := left + strings.Repeat(" ", space) + right
+	line = lipgloss.NewStyle().Width(innerW).MaxWidth(innerW).Render(line)
 
 	return lipgloss.NewStyle().
 		Width(width).
@@ -32,39 +34,42 @@ func Header(width int, tool string, mode Mode, ctx string) string {
 }
 
 func KeyBar(width int, keys []FKey) string {
-	var chunks []string
-	for _, k := range keys {
-		chunks = append(chunks, Accent.Render(k.Key)+" "+Dim.Render(k.Label))
+	innerW := Max(1, width-2)
+	rows := 2
+	cols := (len(keys) + rows - 1) / rows
+	if cols < 1 {
+		cols = 1
 	}
-	sep := Dim.Render("  ·  ")
-	line1 := ""
-	line2 := ""
-	maxWidth := width - 2
-	for _, c := range chunks {
-		if line1 == "" {
-			line1 = c
-			continue
+	colW := Max(1, innerW/cols)
+
+	renderCell := func(k FKey) string {
+		text := ""
+		if strings.TrimSpace(k.Key) != "" || strings.TrimSpace(k.Label) != "" {
+			text = Accent.Render(k.Key)
+			if strings.TrimSpace(k.Label) != "" {
+				text += " " + Dim.Render(k.Label)
+			}
 		}
-		candidate := line1 + sep + c
-		if lipgloss.Width(candidate) <= maxWidth {
-			line1 = candidate
-			continue
-		}
-		if line2 == "" {
-			line2 = c
-		} else {
-			line2 = line2 + sep + c
-		}
+		return lipgloss.NewStyle().Width(colW).MaxWidth(colW).Render(text)
 	}
-	text := line1
-	height := 1
-	if line2 != "" {
-		text = line1 + "\n" + line2
-		height = 2
+
+	cells := make([]FKey, rows*cols)
+	copy(cells, keys)
+
+	lines := make([]string, 0, rows)
+	for r := 0; r < rows; r++ {
+		parts := make([]string, 0, cols)
+		for c := 0; c < cols; c++ {
+			parts = append(parts, renderCell(cells[r*cols+c]))
+		}
+		line := lipgloss.JoinHorizontal(lipgloss.Left, parts...)
+		lines = append(lines, lipgloss.NewStyle().Width(innerW).MaxWidth(innerW).Render(line))
 	}
+
+	text := strings.Join(lines, "\n")
 	return lipgloss.NewStyle().
 		Width(width).
-		Height(height).
+		Height(2).
 		Background(T.BG).
 		Padding(0, 1).
 		Render(text)

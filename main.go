@@ -187,7 +187,7 @@ func (m appModel) keys() []ui.FKey {
 }
 
 func (m appModel) contentSize() (int, int) {
-	ch := m.h - 7
+	ch := m.h - 6
 	if ch < 1 {
 		ch = 1
 	}
