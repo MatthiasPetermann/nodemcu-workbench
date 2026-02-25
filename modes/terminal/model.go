@@ -254,8 +254,7 @@ func (m Model) View() string {
 	w := ui.Max(1, m.w)
 	h := ui.Max(1, m.h)
 
-	title := ui.Accent.Render("Terminal") +
-		ui.Dim.Render(" · F2 clear · F5 reconnect")
+	title := ui.Accent.Render("Terminal")
 
 	sep := ui.Rule.Render(strings.Repeat("─", ui.Max(0, w-6)))
 
