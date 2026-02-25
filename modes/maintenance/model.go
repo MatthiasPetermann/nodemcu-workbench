@@ -149,9 +149,20 @@ func (m Model) renderTiles() string {
 	tileH := ui.Max(5, (m.h-10)/len(m.actions))
 	parts := make([]string, 0, len(m.actions))
 	for i, a := range m.actions {
-		st := lipgloss.NewStyle().Width(cardW).Height(tileH).Padding(0, 1).Border(lipgloss.RoundedBorder()).BorderForeground(ui.T.Border)
+		selected := i == m.cursor
+		st := lipgloss.NewStyle().
+			Width(cardW).
+			Height(tileH).
+			Padding(0, 1).
+			Background(ui.T.BG).
+			Foreground(ui.T.FG).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(ui.T.Border)
 		if i == m.cursor {
-			st = st.BorderForeground(ui.T.Accent)
+			st = st.
+				Background(ui.T.Accent).
+				Foreground(ui.T.BG).
+				BorderForeground(ui.T.Accent2)
 		}
 		sub, art := "", ""
 		switch a {
@@ -165,8 +176,20 @@ func (m Model) renderTiles() string {
 			sub = "0x00000.bin + 0x10000.bin"
 			art = "   ░░░░  ──▶\n     ┌─────────┐\n ─┬──┤  ░░░░░  ├──┬─\n ─┴──┤  ░░░░░  ├──┴─\n     └─────────┘"
 		}
-		left := lipgloss.NewStyle().Width(cardW - 24).Render(ui.Accent.Render(a) + "\n" + ui.Dim.Render(sub))
-		right := lipgloss.NewStyle().Width(22).Align(lipgloss.Right).Background(ui.T.BG).Render(ui.Base.Render(art))
+		titleStyle := lipgloss.NewStyle().Bold(true)
+		subStyle := lipgloss.NewStyle().Foreground(ui.T.Dim)
+		iconStyle := lipgloss.NewStyle().Foreground(ui.T.Dim)
+		leftBG := ui.T.BG
+		rightBG := ui.T.BG
+		if selected {
+			titleStyle = titleStyle.Foreground(ui.T.BG)
+			subStyle = subStyle.Foreground(ui.T.BG)
+			iconStyle = iconStyle.Foreground(ui.T.BG)
+			leftBG = ui.T.Accent
+			rightBG = ui.T.Accent
+		}
+		left := lipgloss.NewStyle().Width(cardW - 24).Background(leftBG).Render(titleStyle.Render(a) + "\n" + subStyle.Render(sub))
+		right := lipgloss.NewStyle().Width(22).Align(lipgloss.Right).Background(rightBG).Render(iconStyle.Render(art))
 		parts = append(parts, st.Render(lipgloss.JoinHorizontal(lipgloss.Top, left, right)))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
