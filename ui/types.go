@@ -34,6 +34,13 @@ type StatusMsg struct {
 	Text string
 }
 
+type ProgressMsg struct {
+	Active bool
+	Phase  string
+	Done   int
+	Total  int
+}
+
 type PromptKind int
 
 const (

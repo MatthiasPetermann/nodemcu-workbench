@@ -68,6 +68,9 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ui.StatusMsg:
 		m.status = m.status.SetStatus(msg.Kind, msg.Text)
 		return m, nil
+	case ui.ProgressMsg:
+		m.status = m.status.SetProgress(msg.Active, msg.Phase, msg.Done, msg.Total)
+		return m, nil
 	case ui.PromptResultMsg:
 		m.status = m.status.EndPrompt()
 		switch m.mode {

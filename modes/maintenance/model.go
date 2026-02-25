@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -26,11 +25,9 @@ type Model struct {
 	busy          bool
 	session       *repl.Session
 
-	phase        string
-	done         int
-	total        int
-	showProgress bool
-
+	phase      string
+	done       int
+	total      int
 	progressCh <-chan tea.Msg
 }
 
@@ -68,18 +65,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case maintenanceProgressMsg:
 		m.phase, m.done, m.total = msg.phase, msg.done, msg.total
 		if m.progressCh != nil {
-			return m, listenProgress(m.progressCh)
+			return m, tea.Batch(statusProgress(true, m.phase, m.done, m.total), listenProgress(m.progressCh))
 		}
 		return m, nil
 	case maintenanceDoneMsg:
 		m.busy = false
 		m.progressCh = nil
-		m.showProgress = false
 		m.phase, m.done, m.total = "idle", 0, 0
+		clear := statusProgress(false, "", 0, 0)
 		if msg.err != nil {
-			return m, statusErr(msg.err.Error())
+			return m, tea.Batch(clear, statusErr(msg.err.Error()))
 		}
-		return m, status(msg.text)
+		return m, tea.Batch(clear, status(msg.text))
 	}
 	return m, nil
 }
@@ -130,10 +127,9 @@ func (m Model) OnPrompt(res ui.PromptResultMsg) (Model, tea.Cmd) {
 	if m.pendingAction == "Flash Firmware" {
 		m.pendingAction = ""
 		m.busy, m.phase, m.done, m.total = true, "prepare", 0, 1
-		m.showProgress = true
 		ch := make(chan tea.Msg, 32)
 		m.progressCh = ch
-		return m, tea.Batch(status("Flashing embedded firmware…"), runFlashFirmware(m.session, m.port, m.baud, ch), listenProgress(ch))
+		return m, tea.Batch(status("Flashing embedded firmware…"), statusProgress(true, "prepare", 0, 1), runFlashFirmware(m.session, m.port, m.baud, ch), listenProgress(ch))
 	}
 	return m, nil
 }
@@ -142,60 +138,38 @@ func (m Model) View() string {
 	if m.w <= 0 || m.h <= 0 {
 		return ""
 	}
-	title := ui.Accent.Render("Maintenance") + ui.Dim.Render(" · tiles")
+	title := ui.Accent.Render("Maintenance") + ui.Dim.Render(" · vertical tiles")
 	cards := m.renderTiles()
 	body := title + "\n\n" + cards
-	if p := m.renderProgress(); p != "" {
-		body += "\n\n" + p
-	}
 	return ui.Frame.Width(m.w-2).Height(m.h).Padding(0, 1).Render(body)
 }
 
 func (m Model) renderTiles() string {
-	// Border + frame composition caused a +1 overflow in each tile.
-	cardW := ui.Max(21, (m.w-8)/3-1)
+	cardW := ui.Max(28, m.w-8)
+	tileH := ui.Max(5, (m.h-10)/len(m.actions))
 	parts := make([]string, 0, len(m.actions))
 	for i, a := range m.actions {
-		st := lipgloss.NewStyle().Width(cardW).Height(5).Padding(0, 1).Border(lipgloss.RoundedBorder()).BorderForeground(ui.T.Border)
+		st := lipgloss.NewStyle().Width(cardW).Height(tileH).Padding(0, 1).Border(lipgloss.RoundedBorder()).BorderForeground(ui.T.Border)
 		if i == m.cursor {
 			st = st.BorderForeground(ui.T.Accent)
 		}
-		sub := ""
+		sub, art := "", ""
 		switch a {
 		case "Identify Device":
 			sub = "Chip + MAC"
+			art = "  .-.-.\n ( o o )\n  | O |"
 		case "Erase Flash":
 			sub = "Full flash erase"
+			art = " [#####]\n  |||\n   ---"
 		case "Flash Firmware":
 			sub = "0x00000.bin + 0x10000.bin"
+			art = "  ____\n / __/\n/_/==>"
 		}
-		parts = append(parts, st.Render(ui.Accent.Render(a)+"\n"+ui.Dim.Render(sub)))
+		left := lipgloss.NewStyle().Width(cardW - 14).Render(ui.Accent.Render(a) + "\n" + ui.Dim.Render(sub))
+		right := lipgloss.NewStyle().Width(12).Align(lipgloss.Right).Render(ui.Dim.Render(art))
+		parts = append(parts, st.Render(lipgloss.JoinHorizontal(lipgloss.Top, left, right)))
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Top, parts...)
-}
-
-func (m Model) renderProgress() string {
-	if !m.showProgress {
-		return ""
-	}
-	phase := m.phase
-	if phase == "" {
-		phase = "idle"
-	}
-	if m.total <= 0 {
-		return ui.Dim.Render(clampRunes("Phase: "+phase, ui.Max(10, m.w-8)))
-	}
-	lineW := ui.Max(20, m.w-8)
-	w := ui.Max(10, lineW-28)
-	fill := int(float64(m.done) / float64(m.total) * float64(w))
-	if fill > w {
-		fill = w
-	}
-	bar := strings.Repeat("█", fill) + strings.Repeat("░", w-fill)
-	pct := int(float64(m.done) / float64(m.total) * 100)
-	header := clampRunes(fmt.Sprintf("Phase: %s", phase), lineW)
-	stats := clampRunes(fmt.Sprintf(" %3d%%  %d/%d bytes", pct, m.done, m.total), lineW)
-	return header + "\n" + ui.Accent.Render("["+bar+"]") + stats
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
 func listenProgress(ch <-chan tea.Msg) tea.Cmd {
@@ -326,20 +300,6 @@ func runFlashFirmware(sess *repl.Session, port string, baud int, ch chan<- tea.M
 	}
 }
 
-func clampRunes(s string, max int) string {
-	if max <= 0 {
-		return ""
-	}
-	if utf8.RuneCountInString(s) <= max {
-		return s
-	}
-	r := []rune(s)
-	if max <= 1 {
-		return string(r[:max])
-	}
-	return string(r[:max-1]) + "…"
-}
-
 func envOr(name, fallback string) string {
 	v := strings.TrimSpace(os.Getenv(name))
 	if v == "" {
@@ -356,4 +316,8 @@ func statusWarn(text string) tea.Cmd {
 }
 func statusErr(text string) tea.Cmd {
 	return func() tea.Msg { return ui.StatusMsg{Kind: ui.StatusError, Text: text} }
+}
+
+func statusProgress(active bool, phase string, done, total int) tea.Cmd {
+	return func() tea.Msg { return ui.ProgressMsg{Active: active, Phase: phase, Done: done, Total: total} }
 }
